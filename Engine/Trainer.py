@@ -26,19 +26,27 @@ class COMTrainer:
 
         self._train_epoch = cfg['Training']['epoch']
         self.loss_func = MSELoss()
+        self.scaler = torch.cuda.amp.GradScaler()
 
     def train(self):
         counter = 0
         for epoch in range(self._train_epoch):
             for data_cpu in self.data_loader:
                 data = data_cpu.cuda()
-                first_feature, first_kp, kps = self.kp_detector(data)
-                predicted_images = self.kp_decoder(first_feature, first_kp, kps)
-                loss = torch.sum(self.loss_func(data[:, 1:], predicted_images))
+                with torch.cuda.amp.autocast():
+                    first_feature, first_kp, kps = self.kp_detector(data)
+                    predicted_images = self.kp_decoder(first_feature, first_kp, kps)
+                    loss = torch.sum(self.loss_func(data[:, 1:], predicted_images))
 
+                self.optimizer.zero_grad()
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+                '''
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
+                '''
                 print(counter, loss.detach().cpu())
                 if counter % 10 == 0:
                     # batch, len, 3, h, w
